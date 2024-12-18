@@ -21,7 +21,7 @@ class FileRepository extends PackageRepository {
   FileRepository(this.baseDir);
 
   @override
-  Stream<PackageVersion> versions(String package) {
+  Stream<PackageVersion?> versions(String package) {
     var directory = Directory(p.join(baseDir, package));
     if (directory.existsSync()) {
       return directory
@@ -45,11 +45,11 @@ class FileRepository extends PackageRepository {
   // TODO: Could be optimized by searching for the exact package/version
   // combination instead of enumerating all.
   @override
-  Future<PackageVersion> lookupVersion(String package, String version) {
+  Future<PackageVersion?> lookupVersion(String package, String version) {
     return versions(package)
-        .where((pv) => pv.versionString == version)
+        .where((pv) => pv?.versionString == version)
         .toList()
-        .then((List<PackageVersion> versions) {
+        .then((List<PackageVersion?> versions) {
       if (versions.isNotEmpty) return versions.first;
       return null;
     });
@@ -66,7 +66,7 @@ class FileRepository extends PackageRepository {
     var tarballBytes = bb.takeBytes();
     var tarBytes = GZipDecoder().decodeBytes(tarballBytes);
     var archive = TarDecoder().decodeBytes(tarBytes);
-    ArchiveFile pubspecArchiveFile;
+    ArchiveFile? pubspecArchiveFile;
     for (var file in archive.files) {
       if (file.name == 'pubspec.yaml') {
         pubspecArchiveFile = file;

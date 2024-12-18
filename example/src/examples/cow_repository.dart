@@ -40,7 +40,7 @@ class CopyAndWriteRepository extends PackageRepository {
 
   @override
   Stream<PackageVersion> versions(String package) {
-    StreamController<PackageVersion> controller;
+    StreamController<PackageVersion>? controller;
     void onListen() {
       var waitList = [_localCache.fetchVersionlist(package)];
       if (standalone != true) {
@@ -52,9 +52,9 @@ class CopyAndWriteRepository extends PackageRepository {
           versions.addAll(tuple[1]);
         }
         for (var version in versions) {
-          controller.add(version);
+          controller?.add(version);
         }
-        controller.close();
+        controller?.close();
       });
     }
 
@@ -63,7 +63,7 @@ class CopyAndWriteRepository extends PackageRepository {
   }
 
   @override
-  Future<PackageVersion> lookupVersion(String package, String version) {
+  Future<PackageVersion?> lookupVersion(String package, String version) {
     return versions(package)
         .where((pv) => pv.versionString == version)
         .toList()
@@ -135,7 +135,8 @@ class _RemoteMetadataCache {
 
           _versions.putIfAbsent(package, () => <PackageVersion>{});
           remote.versions(package).toList().then((versions) {
-            _versions[package].addAll(versions);
+            _versions[package]
+                ?.addAll(versions.where((e) => e != null).map((e) => e!));
             c.complete(_versions[package]);
           });
 

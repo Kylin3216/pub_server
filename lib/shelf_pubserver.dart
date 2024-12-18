@@ -141,7 +141,7 @@ class ShelfPubServer {
       RegExp(r'^/packages/([^/]+)/versions/([^/]+)\.tar\.gz$');
 
   final PackageRepository repository;
-  final PackageCache cache;
+  final PackageCache? cache;
 
   ShelfPubServer(this.repository, {this.cache});
 
@@ -150,22 +150,22 @@ class ShelfPubServer {
     if (request.method == 'GET') {
       var downloadMatch = _downloadRegexp.matchAsPrefix(path);
       if (downloadMatch != null) {
-        var package = Uri.decodeComponent(downloadMatch.group(1));
-        var version = Uri.decodeComponent(downloadMatch.group(2));
+        var package = Uri.decodeComponent(downloadMatch.group(1)!);
+        var version = Uri.decodeComponent(downloadMatch.group(2)!);
         if (!isSemanticVersion(version)) return _invalidVersion(version);
         return _download(request.requestedUri, package, version);
       }
 
       var packageMatch = _packageRegexp.matchAsPrefix(path);
       if (packageMatch != null) {
-        var package = Uri.decodeComponent(packageMatch.group(1));
+        var package = Uri.decodeComponent(packageMatch.group(1)!);
         return _listVersions(request.requestedUri, package);
       }
 
       var versionMatch = _versionRegexp.matchAsPrefix(path);
       if (versionMatch != null) {
-        var package = Uri.decodeComponent(versionMatch.group(1));
-        var version = Uri.decodeComponent(versionMatch.group(2));
+        var package = Uri.decodeComponent(versionMatch.group(1)!);
+        var version = Uri.decodeComponent(versionMatch.group(2)!);
         if (!isSemanticVersion(version)) return _invalidVersion(version);
         return _showVersion(request.requestedUri, package, version);
       }
@@ -200,7 +200,7 @@ class ShelfPubServer {
         }
 
         return _uploadSimple(request.requestedUri,
-            request.headers['content-type'], request.read());
+            request.headers['content-type']!, request.read());
       } else {
         if (!repository.supportsUploaders) {
           return shelf.Response.notFound(null);
@@ -208,7 +208,7 @@ class ShelfPubServer {
 
         var addUploaderMatch = _addUploaderRegexp.matchAsPrefix(path);
         if (addUploaderMatch != null) {
-          var package = Uri.decodeComponent(addUploaderMatch.group(1));
+          var package = Uri.decodeComponent(addUploaderMatch.group(1)!);
           return request.readAsString().then((String body) {
             return _addUploader(package, body);
           });
@@ -221,8 +221,8 @@ class ShelfPubServer {
 
       var removeUploaderMatch = _removeUploaderRegexp.matchAsPrefix(path);
       if (removeUploaderMatch != null) {
-        var package = Uri.decodeComponent(removeUploaderMatch.group(1));
-        var user = Uri.decodeComponent(removeUploaderMatch.group(2));
+        var package = Uri.decodeComponent(removeUploaderMatch.group(1)!);
+        var user = Uri.decodeComponent(removeUploaderMatch.group(2)!);
         return removeUploader(package, user);
       }
     }
@@ -233,13 +233,15 @@ class ShelfPubServer {
 
   Future<shelf.Response> _listVersions(Uri uri, String package) async {
     if (cache != null) {
-      var binaryJson = await cache.getPackageData(package);
+      var binaryJson = await cache?.getPackageData(package);
       if (binaryJson != null) {
         return _binaryJsonResponse(binaryJson);
       }
     }
 
-    var packageVersions = await repository.versions(package).toList();
+    var pVersions = await repository.versions(package).toList();
+    var packageVersions =
+        pVersions.where((e) => e != null).map((e) => e!).toList();
     if (packageVersions.isEmpty) {
       return shelf.Response.notFound(null);
     }
@@ -268,11 +270,11 @@ class ShelfPubServer {
     // duplicated in 'versions'.
     var binaryJson = convert.json.encoder.fuse(convert.utf8.encoder).convert({
       'name': package,
-      'latest': packageVersion2Json(latestVersion),
+      'latest': packageVersion2Json(latestVersion!),
       'versions': packageVersions.map(packageVersion2Json).toList(),
     });
     if (cache != null) {
-      await cache.setPackageData(package, binaryJson);
+      await cache?.setPackageData(package, binaryJson);
     }
     return _binaryJsonResponse(binaryJson);
   }
@@ -321,7 +323,7 @@ class ShelfPubServer {
       final vers = await repository.finishAsyncUpload(uri);
       if (cache != null) {
         _logger.info('Invalidating cache for package ${vers.packageName}.');
-        await cache.invalidatePackageData(vers.packageName);
+        await cache?.invalidatePackageData(vers.packageName);
       }
       return _jsonResponse({
         'success': {
@@ -371,10 +373,11 @@ class ShelfPubServer {
     // eventually a destruction of the socket, this is an odd side-effect.
     // What we would like to have is something like this:
     //     parts.expect(1).then((part) { upload(part); })
-    MimeMultipart thePart;
+    MimeMultipart? thePart;
+    final transformer=MimeMultipartTransformer(boundary);
 
     await for (MimeMultipart part
-        in stream.transform(MimeMultipartTransformer(boundary))) {
+        in transformer.bind(stream)) {
       // If we get more than one part, we'll ignore the rest of the input.
       if (thePart != null) {
         continue;
@@ -386,10 +389,10 @@ class ShelfPubServer {
     try {
       // TODO: Ensure that `part.headers['content-disposition']` is
       // `form-data; name="file"; filename="package.tar.gz`
-      var version = await repository.upload(thePart);
+      var version = await repository.upload(thePart!);
       if (cache != null) {
         _logger.info('Invalidating cache for package ${version.packageName}.');
-        await cache.invalidatePackageData(version.packageName);
+        await cache?.invalidatePackageData(version.packageName);
       }
       _logger.info('Redirecting to found url.');
       return shelf.Response.found(_finishUploadSimpleUrl(uri));
@@ -500,7 +503,7 @@ class ShelfPubServer {
   Uri _uploadSimpleUrl(Uri url) =>
       url.resolve('/api/packages/versions/newUpload');
 
-  Uri _finishUploadSimpleUrl(Uri url, {String error}) {
+  Uri _finishUploadSimpleUrl(Uri url, {String? error}) {
     var postfix = error == null ? '' : '?error=${Uri.encodeComponent(error)}';
     return url.resolve('/api/packages/versions/newUploadFinish$postfix');
   }
@@ -524,7 +527,7 @@ abstract class PackageCache {
   Future invalidatePackageData(String package);
 }
 
-String _getBoundary(String contentType) {
+String? _getBoundary(String contentType) {
   var mediaType = MediaType.parse(contentType);
 
   if (mediaType.type == 'multipart' && mediaType.subtype == 'form-data') {

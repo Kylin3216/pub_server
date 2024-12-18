@@ -48,7 +48,7 @@ class HttpProxyRepository extends PackageRepository {
   // just talk to the HTTP endpoint which gives us a specific package/version
   // combination.
   @override
-  Future<PackageVersion> lookupVersion(String package, String version) {
+  Future<PackageVersion?> lookupVersion(String package, String version) {
     return versions(package)
         .where((v) => v.packageName == package && v.versionString == version)
         .toList()
